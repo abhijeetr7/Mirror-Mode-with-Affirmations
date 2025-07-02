@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mirror Mode</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the video to ensure it covers the screen and flips horizontally */
+        #webcamVideo {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Cover the entire screen without distortion */
+            transform: scaleX(-1); /* Flip horizontally for a mirror effect */
+            z-index: -1; /* Send video to the background */
+        }
+
+        /* Affirmation text styling */
+        #affirmationText {
+            font-family: 'Inter', sans-serif;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5); /* Add text shadow for readability */
+        }
+
+        /* Speech bubble animation */
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+
+        .speech-bubble-animation {
+            animation: fadeInOut 5s ease-in-out forwards; /* 5 seconds for the full cycle */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center h-screen overflow-hidden">
+
+    <!-- Webcam Video Feed -->
+    <video id="webcamVideo" autoplay playsinline></video>
+
+    <!-- Overlay for Affirmations -->
+    <div id="affirmationOverlay" class="absolute inset-0 flex items-center justify-center p-4">
+        <p id="affirmationText" class="text-5xl md:text-7xl lg:text-8xl font-extrabold text-white text-center opacity-90 transition-opacity duration-500"></p>
+    </div>
+
+    <!-- Speech Bubble (Optional) -->
+    <div id="speechBubble" class="absolute bottom-32 md:bottom-48 bg-blue-600 text-white text-xl md:text-2xl lg:text-3xl px-6 py-3 rounded-full shadow-lg opacity-0 transition-opacity duration-300 transform scale-95 origin-bottom-left" style="display: none;">
+        <span id="speechText"></span>
+    </div>
+
+    <!-- Controls -->
+    <div class="absolute bottom-8 flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4 z-10">
+        <button id="shuffleButton" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-purple-500 focus:ring-opacity-50">
+            Shuffle Affirmation
+        </button>
+        <button id="toggleMusicButton" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50">
+            Toggle Music
+        </button>
+        <button id="toggleSpeechButton" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50">
+            Toggle Speech
+        </button>
+    </div>
+
+    <!-- Calming Music Audio -->
+    <audio id="calmingMusic" loop>
+        <!-- You can replace this with your preferred calming audio file -->
+        <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        const webcamVideo = document.getElementById('webcamVideo');
+        const affirmationText = document.getElementById('affirmationText');
+        const shuffleButton = document.getElementById('shuffleButton');
+        const toggleMusicButton = document.getElementById('toggleMusicButton');
+        const toggleSpeechButton = document.getElementById('toggleSpeechButton');
+        const calmingMusic = document.getElementById('calmingMusic');
+        const speechBubble = document.getElementById('speechBubble');
+        const speechText = document.getElementById('speechText');
+
+        // Array of positive affirmations
+        const affirmations = [
+            "You’re doing your best.",
+            "Breathe. You are here.",
+            "Smile at yourself.",
+            "You are worthy of love and happiness.",
+            "Every day is a new beginning.",
+            "You are strong and resilient.",
+            "Believe in yourself.",
+            "Your potential is limitless.",
+            "You are enough.",
+            "Embrace your unique self.",
+            "You are capable of amazing things.",
+            "Let go of what no longer serves you.",
+            "Find joy in the little things.",
+            "You are growing and evolving.",
+            "Be kind to yourself.",
+            "Your presence is a gift.",
+            "You are surrounded by good.",
+            "Trust the journey.",
+            "You are a beautiful soul."
+        ];
+
+        let currentAffirmationIndex = -1;
+        let speechEnabled = true; // Text-to-speech enabled by default
+        let musicPlaying = false; // Music is off by default
+        let affirmationInterval; // To store the interval ID for automatic switching
+
+        // Function to get webcam feed
+        async function setupWebcam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                webcamVideo.srcObject = stream;
+                // Play video after metadata is loaded to ensure it's ready
+                webcamVideo.onloadedmetadata = () => {
+                    webcamVideo.play();
+                };
+            } catch (err) {
+                console.error("Error accessing webcam: ", err);
+                // Display a message to the user if webcam access fails
+                affirmationText.textContent = "Please allow webcam access to use Mirror Mode.";
+                affirmationText.classList.add('text-red-500'); // Make error message red
+            }
+        }
+
+        // Function to display a random affirmation
+        function displayRandomAffirmation() {
+            let newIndex;
+            do {
+                newIndex = Math.floor(Math.random() * affirmations.length);
+            } while (newIndex === currentAffirmationIndex && affirmations.length > 1); // Ensure a different affirmation if possible
+
+            currentAffirmationIndex = newIndex;
+            const affirmation = affirmations[currentAffirmationIndex];
+
+            // Fade out current text, change, then fade in new text
+            affirmationText.style.opacity = '0';
+            setTimeout(() => {
+                affirmationText.textContent = affirmation;
+                affirmationText.style.opacity = '0.9';
+                if (speechEnabled) {
+                    speakAffirmation(affirmation);
+                }
+            }, 500); // Wait for fade out to complete
+        }
+
+        // Function to speak the affirmation
+        function speakAffirmation(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US'; // Set language for better pronunciation
+
+                // Optional: Show speech bubble animation
+                speechText.textContent = text;
+                speechBubble.style.display = 'block';
+                speechBubble.classList.remove('speech-bubble-animation'); // Reset animation
+                void speechBubble.offsetWidth; // Trigger reflow
+                speechBubble.classList.add('speech-bubble-animation');
+
+                utterance.onend = () => {
+                    // Hide speech bubble after speech ends, allowing animation to complete
+                    setTimeout(() => {
+                        speechBubble.style.display = 'none';
+                    }, 500); // Match or slightly exceed animation duration
+                };
+
+                speechSynthesis.speak(utterance);
+            } else {
+                console.warn("Text-to-speech not supported in this browser.");
+                // Optionally display a message to the user
+            }
+        }
+
+        // Toggle music playback
+        function toggleMusic() {
+            if (musicPlaying) {
+                calmingMusic.pause();
+                toggleMusicButton.textContent = "Play Music";
+            } else {
+                calmingMusic.play().catch(e => console.error("Error playing music:", e));
+                toggleMusicButton.textContent = "Pause Music";
+            }
+            musicPlaying = !musicPlaying;
+        }
+
+        // Toggle text-to-speech
+        function toggleSpeech() {
+            speechEnabled = !speechEnabled;
+            toggleSpeechButton.textContent = speechEnabled ? "Disable Speech" : "Enable Speech";
+            if (!speechEnabled && 'speechSynthesis' in window) {
+                speechSynthesis.cancel(); // Stop any ongoing speech
+            }
+        }
+
+        // Start automatic affirmation switching
+        function startAffirmationTimer() {
+            // Clear any existing interval to prevent duplicates
+            if (affirmationInterval) {
+                clearInterval(affirmationInterval);
+            }
+            // Change affirmation every 10 seconds
+            affirmationInterval = setInterval(displayRandomAffirmation, 10000);
+        }
+
+        // Event Listeners
+        shuffleButton.addEventListener('click', () => {
+            displayRandomAffirmation();
+            startAffirmationTimer(); // Reset timer on manual shuffle
+        });
+        toggleMusicButton.addEventListener('click', toggleMusic);
+        toggleSpeechButton.addEventListener('click', toggleSpeech);
+
+        // Initialize on window load
+        window.onload = () => {
+            setupWebcam();
+            displayRandomAffirmation(); // Display initial affirmation
+            startAffirmationTimer(); // Start automatic switching
+        };
+    </script>
+</body>
+</html>
